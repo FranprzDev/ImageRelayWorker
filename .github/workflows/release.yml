@@ -20,6 +20,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Validate release version
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must use vMAJOR.MINOR.PATCH, for example v1.0.0"
+            exit 1
+          fi
+
       - name: Validate
         run: |
           go fmt ./...

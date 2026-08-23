@@ -7,6 +7,9 @@ Esta guía explica cómo generar el `.exe`, copiarlo a la PC de Uruguay, configu
 La forma más simple para el operador es descargar el ejecutable desde la sección
 [Releases de GitHub](https://github.com/FranprzDev/ImageRelayWorker/releases).
 
+La política de versionado, rollback y futura firma de código está documentada en
+[`docs/release-policy.md`](release-policy.md).
+
 Al publicar un tag con formato `vX.Y.Z`, GitHub Actions automáticamente:
 
 1. ejecuta `fmt`, `vet`, tests y race tests;
