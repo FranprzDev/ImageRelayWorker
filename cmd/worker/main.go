@@ -7,17 +7,27 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"imagerelayworker/internal/api"
 	"imagerelayworker/internal/config"
 	"imagerelayworker/internal/downloader"
+	"imagerelayworker/internal/platform"
 	"imagerelayworker/internal/worker"
 )
 
 func main() {
+	if shouldOpenConfigurator() {
+		if err := openConfigurator(); err != nil {
+			slog.Error("could not open configurator", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("invalid configuration", "error", err)
@@ -58,4 +68,19 @@ func parseLevel(value string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+func shouldOpenConfigurator() bool {
+	if platform.IsWindowsService() {
+		return false
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--configure" {
+		return true
+	}
+	return os.Getenv("API_BASE_URL") == "" || os.Getenv("WORKER_TOKEN") == "" || os.Getenv("WORKER_ID") == ""
+}
+
+func openConfigurator() error {
+	path := filepath.Join(filepath.Dir(os.Args[0]), "configure.cmd")
+	return exec.Command("cmd.exe", "/c", path).Run()
 }
