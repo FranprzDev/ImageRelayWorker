@@ -81,6 +81,9 @@ func shouldOpenConfigurator() bool {
 }
 
 func openConfigurator() error {
-	path := filepath.Join(filepath.Dir(os.Args[0]), "configure.cmd")
-	return exec.Command("cmd.exe", "/c", path).Run()
+	dir := filepath.Dir(os.Args[0])
+	if len(os.Args) > 1 && os.Args[1] == "--configure" {
+		return exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", filepath.Join(dir, "configure.ps1")).Run()
+	}
+	return exec.Command("cmd.exe", "/c", filepath.Join(dir, "configure.cmd")).Run()
 }
