@@ -4,7 +4,7 @@
     <MediaTemplate EmbedCab="yes" />
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <Feature Id="MainFeature" Title="ImageRelayWorker" Level="1"><ComponentGroupRef Id="ProductComponents" /></Feature>
-    <Directory Id="TARGETDIR" Name="SourceDir"><Directory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="ImageRelayWorker" /></Directory></Directory>
+    <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="ImageRelayWorker" /></StandardDirectory>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       <Component Id="WorkerComponent" Guid="*">
         <File Id="WorkerExe" Source="$(var.WorkerExe)" KeyPath="yes" />
