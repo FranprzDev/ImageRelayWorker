@@ -20,6 +20,9 @@ jobs:
       - name: Install WiX
         shell: pwsh
         run: dotnet tool install --global wix --version 5.0.2
+      - name: Install WiX UI extension
+        shell: pwsh
+        run: wix extension add -g WixToolset.UI.wixext/5.0.2
       - name: Build MSI
         shell: pwsh
         run: wix build installer/ImageRelayWorker.wxs -dWorkerExe=image-relay-worker-windows-amd64.exe -dConfigureScript=installer/configure.ps1 -o ImageRelayWorker-${{ github.ref_name }}.msi -ext WixToolset.UI.wixext
