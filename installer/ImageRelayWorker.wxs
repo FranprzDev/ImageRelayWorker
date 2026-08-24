@@ -1,0 +1,17 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="ImageRelayWorker" Manufacturer="FranprzDev" Version="1.0.1" UpgradeCode="7D1C7D5B-48E4-4B5D-BB4A-2C0B7C6E4C10" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="Ya hay una versión más nueva instalada." />
+    <MediaTemplate EmbedCab="yes" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <Feature Id="MainFeature" Title="ImageRelayWorker" Level="1"><ComponentGroupRef Id="ProductComponents" /></Feature>
+    <Directory Id="TARGETDIR" Name="SourceDir"><Directory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="ImageRelayWorker" /></Directory></Directory>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="WorkerComponent" Guid="*">
+        <File Id="WorkerExe" Source="$(var.WorkerExe)" KeyPath="yes" />
+        <File Id="ConfigureScript" Source="$(var.ConfigureScript)" />
+        <ServiceInstall Id="WorkerServiceInstall" Name="ImageRelayWorker" DisplayName="ImageRelayWorker" Description="Procesa trabajos de imágenes." Start="auto" Type="ownProcess" ErrorControl="normal" Vital="yes" />
+        <ServiceControl Id="WorkerServiceControl" Name="ImageRelayWorker" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+    </ComponentGroup>
+  </Package>
+</Wix>
