@@ -2,6 +2,13 @@ name: Release Windows artifacts
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'installer/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
 permissions: { contents: write }
 jobs:
   release:
@@ -45,6 +52,7 @@ jobs:
           (Get-FileHash image-relay-worker-windows-amd64.exe -Algorithm SHA256).Hash.ToLower() + '  image-relay-worker-windows-amd64.exe' | Set-Content image-relay-worker-windows-amd64.exe.sha256
           (Get-FileHash ImageRelayWorker-${{ github.ref_name }}.msi -Algorithm SHA256).Hash.ToLower() + '  ImageRelayWorker-${{ github.ref_name }}.msi' | Set-Content ImageRelayWorker-${{ github.ref_name }}.msi.sha256
       - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
         env: { GH_TOKEN: '${{ github.token }}' }
         shell: bash
         run: gh release create "${GITHUB_REF_NAME}" image-relay-worker-windows-amd64.exe image-relay-worker-windows-amd64.exe.sha256 ImageRelayWorker-${GITHUB_REF_NAME}.msi ImageRelayWorker-${GITHUB_REF_NAME}.msi.sha256 --title "ImageRelayWorker ${GITHUB_REF_NAME}" --generate-notes
