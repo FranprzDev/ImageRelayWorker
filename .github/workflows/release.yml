@@ -32,11 +32,14 @@ jobs:
         run: wix extension add -g WixToolset.UI.wixext/5.0.2
       - name: Build MSI
         shell: pwsh
-        run: wix build installer/ImageRelayWorker.wxs -d WorkerExe=image-relay-worker-windows-amd64.exe -d ConfigureScript=installer/configure.ps1 -o ImageRelayWorker-${{ github.ref_name }}.msi -ext WixToolset.UI.wixext
+        run: |
+          $msi = if ($env:GITHUB_REF_TYPE -eq 'tag') { "ImageRelayWorker-$env:GITHUB_REF_NAME.msi" } else { "ImageRelayWorker-pr.msi" }
+          "MSI_NAME=$msi" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          wix build installer/ImageRelayWorker.wxs -d WorkerExe=image-relay-worker-windows-amd64.exe -d ConfigureScript=installer/configure.ps1 -o $msi -ext WixToolset.UI.wixext
       - name: Validate MSI install and uninstall
         shell: pwsh
         run: |
-          $msi = "ImageRelayWorker-${{ github.ref_name }}.msi"
+          $msi = $env:MSI_NAME
           $log = Join-Path $env:RUNNER_TEMP "image-relay-worker-msi.log"
           $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /l*v `"$log`"" -Wait -PassThru
           if ($p.ExitCode -ne 0) { Get-Content $log; throw "MSI install failed: $($p.ExitCode)" }
@@ -50,9 +53,9 @@ jobs:
         shell: pwsh
         run: |
           (Get-FileHash image-relay-worker-windows-amd64.exe -Algorithm SHA256).Hash.ToLower() + '  image-relay-worker-windows-amd64.exe' | Set-Content image-relay-worker-windows-amd64.exe.sha256
-          (Get-FileHash ImageRelayWorker-${{ github.ref_name }}.msi -Algorithm SHA256).Hash.ToLower() + '  ImageRelayWorker-${{ github.ref_name }}.msi' | Set-Content ImageRelayWorker-${{ github.ref_name }}.msi.sha256
+          (Get-FileHash $env:MSI_NAME -Algorithm SHA256).Hash.ToLower() + "  $env:MSI_NAME" | Set-Content "$env:MSI_NAME.sha256"
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         env: { GH_TOKEN: '${{ github.token }}' }
         shell: bash
-        run: gh release create "${GITHUB_REF_NAME}" image-relay-worker-windows-amd64.exe image-relay-worker-windows-amd64.exe.sha256 ImageRelayWorker-${GITHUB_REF_NAME}.msi ImageRelayWorker-${GITHUB_REF_NAME}.msi.sha256 --title "ImageRelayWorker ${GITHUB_REF_NAME}" --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" image-relay-worker-windows-amd64.exe image-relay-worker-windows-amd64.exe.sha256 "$MSI_NAME" "$MSI_NAME.sha256" --title "ImageRelayWorker ${GITHUB_REF_NAME}" --generate-notes
