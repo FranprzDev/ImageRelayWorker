@@ -52,10 +52,9 @@ jobs:
       - name: Checksums
         shell: pwsh
         run: |
-          (Get-FileHash image-relay-worker-windows-amd64.exe -Algorithm SHA256).Hash.ToLower() + '  image-relay-worker-windows-amd64.exe' | Set-Content image-relay-worker-windows-amd64.exe.sha256
           (Get-FileHash $env:MSI_NAME -Algorithm SHA256).Hash.ToLower() + "  $env:MSI_NAME" | Set-Content "$env:MSI_NAME.sha256"
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         env: { GH_TOKEN: '${{ github.token }}' }
         shell: bash
-        run: gh release create "${GITHUB_REF_NAME}" image-relay-worker-windows-amd64.exe image-relay-worker-windows-amd64.exe.sha256 "$MSI_NAME" "$MSI_NAME.sha256" --title "ImageRelayWorker ${GITHUB_REF_NAME}" --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" "$MSI_NAME" "$MSI_NAME.sha256" --title "ImageRelayWorker ${GITHUB_REF_NAME}" --generate-notes
