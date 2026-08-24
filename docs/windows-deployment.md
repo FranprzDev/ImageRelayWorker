@@ -255,3 +255,17 @@ nssm start ImageRelayWorker
 5. Ejecutar nuevamente el healthcheck y una prueba controlada.
 
 No sobrescribir el ejecutable mientras el servicio está activo.
+
+## Prueba manual obligatoria del MSI antes del merge
+
+La validación automática del workflow comprueba que Windows pueda instalar y desinstalar el MSI y registrar/remover el servicio. Antes de poner una release en uso, hacer además esta prueba controlada en una PC Windows 10/11:
+
+1. Instalar `ImageRelayWorker-vX.Y.Z.msi` como administrador.
+2. Abrir la interfaz de configuración instalada y completar la URL de API, el token y el ID del worker.
+3. Confirmar que el servicio `ImageRelayWorker` quedó iniciado.
+4. Consultar `http://127.0.0.1:8080/health` y `/stats`.
+5. Crear un único job controlado y verificar en Railway: claim, upload binario, `complete` y persistencia de la imagen.
+6. Instalar la siguiente versión sobre la anterior y repetir `/health` y `/stats`.
+7. Desinstalar desde **Aplicaciones instaladas** y confirmar que el servicio y los archivos del programa desaparecieron.
+
+No usar tokens reales en logs, capturas o tickets. La protección del token con ACL/DPAPI y la firma del MSI y del ejecutable quedan como evolución posterior; no son sustituidas por esta prueba.

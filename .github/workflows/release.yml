@@ -23,6 +23,19 @@ jobs:
       - name: Build MSI
         shell: pwsh
         run: wix build installer/ImageRelayWorker.wxs -dWorkerExe=image-relay-worker-windows-amd64.exe -dConfigureScript=installer/configure.ps1 -o ImageRelayWorker-${{ github.ref_name }}.msi -ext WixToolset.UI.wixext
+      - name: Validate MSI install and uninstall
+        shell: pwsh
+        run: |
+          $msi = "ImageRelayWorker-${{ github.ref_name }}.msi"
+          $log = Join-Path $env:RUNNER_TEMP "image-relay-worker-msi.log"
+          $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /l*v `"$log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log; throw "MSI install failed: $($p.ExitCode)" }
+          $svc = Get-Service ImageRelayWorker -ErrorAction Stop
+          if ($svc.Status -notin @('Stopped','Running')) { throw "Service was not registered correctly" }
+          $p = Start-Process msiexec.exe -ArgumentList "/x `"$msi`" /qn /norestart" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "MSI uninstall failed: $($p.ExitCode)" }
+          if (Get-Service ImageRelayWorker -ErrorAction SilentlyContinue) { throw "Service remained after uninstall" }
+
       - name: Checksums
         shell: pwsh
         run: |
