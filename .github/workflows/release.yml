@@ -25,7 +25,7 @@ jobs:
         run: wix extension add -g WixToolset.UI.wixext/5.0.2
       - name: Build MSI
         shell: pwsh
-        run: wix build installer/ImageRelayWorker.wxs -dWorkerExe=image-relay-worker-windows-amd64.exe -dConfigureScript=installer/configure.ps1 -o ImageRelayWorker-${{ github.ref_name }}.msi -ext WixToolset.UI.wixext
+        run: wix build installer/ImageRelayWorker.wxs -d WorkerExe=image-relay-worker-windows-amd64.exe -d ConfigureScript=installer/configure.ps1 -o ImageRelayWorker-${{ github.ref_name }}.msi -ext WixToolset.UI.wixext
       - name: Validate MSI install and uninstall
         shell: pwsh
         run: |
