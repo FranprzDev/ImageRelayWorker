@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -17,43 +16,51 @@ import (
 	"imagerelayworker/internal/config"
 	"imagerelayworker/internal/downloader"
 	"imagerelayworker/internal/platform"
+	"imagerelayworker/internal/web"
 	"imagerelayworker/internal/worker"
 )
 
 func main() {
-	if shouldOpenConfigurator() {
-		if err := openConfigurator(); err != nil {
-			slog.Error("could not open configurator", "error", err)
-			os.Exit(1)
-		}
-		return
-	}
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("invalid configuration", "error", err)
-		os.Exit(1)
+		cfg = config.Config{HealthBindAddress: "127.0.0.1", HealthPort: 8080, PollInterval: 5 * time.Second}
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	updates := make(chan config.Config, 1)
+	if err == nil {
+		updates <- cfg
+	} else {
+		slog.Error("worker is waiting for configuration", "error", err)
+	}
+	if !platform.IsWindowsService() {
+		go serveWeb(cfg, err == nil, updates)
+	}
+	var cancel context.CancelFunc
+	for {
+		select {
+		case next := <-updates:
+			if cancel != nil {
+				cancel()
+			}
+			var child context.Context
+			child, cancel = context.WithCancel(ctx)
+			go runWorker(child, next)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func runWorker(ctx context.Context, cfg config.Config) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
 	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, MaxIdleConns: 32, MaxIdleConnsPerHost: 8, IdleConnTimeout: 90 * time.Second, ResponseHeaderTimeout: cfg.DownloadTimeout}
 	httpClient := &http.Client{Transport: transport}
 	client := &api.Client{BaseURL: cfg.APIBaseURL, Token: cfg.WorkerToken, WorkerID: cfg.WorkerID, HTTP: httpClient, UploadTimeout: cfg.UploadTimeout}
-	downloaderClient := &downloader.Downloader{Client: httpClient, Timeout: cfg.DownloadTimeout, MaxBytes: int64(cfg.MaxImageSizeMB) * 1024 * 1024, UserAgent: cfg.UserAgent, AllowHTTP: cfg.AllowHTTP}
-	jobWorker := &worker.Worker{API: client, DL: downloaderClient, Poll: cfg.PollInterval, Concurrency: cfg.MaxConcurrent, Attempts: cfg.RetryMaxAttempts, BaseDelay: cfg.RetryBaseDelayMS, Log: logger}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	healthServer := &http.Server{Addr: fmt.Sprintf("%s:%d", cfg.HealthBindAddress, cfg.HealthPort), Handler: worker.Health(&jobWorker.Stats, cfg.WorkerID)}
-	go func() {
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("health server failed", "error", err)
-		}
-	}()
+	dl := &downloader.Downloader{Client: httpClient, Timeout: cfg.DownloadTimeout, MaxBytes: int64(cfg.MaxImageSizeMB) * 1024 * 1024, UserAgent: cfg.UserAgent, AllowHTTP: cfg.AllowHTTP}
+	w := &worker.Worker{API: client, DL: dl, Poll: cfg.PollInterval, Concurrency: cfg.MaxConcurrent, Attempts: cfg.RetryMaxAttempts, BaseDelay: cfg.RetryBaseDelayMS, Log: logger}
 	logger.Info("worker started", "workerId", cfg.WorkerID, "concurrency", cfg.MaxConcurrent)
-	_ = jobWorker.Run(ctx)
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	_ = healthServer.Shutdown(shutdownCtx)
+	_ = w.Run(ctx)
 	transport.CloseIdleConnections()
 }
 
@@ -70,20 +77,15 @@ func parseLevel(value string) slog.Level {
 	}
 }
 
-func shouldOpenConfigurator() bool {
-	if platform.IsWindowsService() {
-		return false
+func serveWeb(cfg config.Config, running bool, updates chan<- config.Config) {
+	active := &atomic.Bool{}
+	active.Store(running)
+	s := &web.Server{Config: cfg, Addr: "127.0.0.1:5173", Running: active.Load, OnConfigSaved: func(c config.Config) { active.Store(true); updates <- c }}
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", "http://127.0.0.1:5173").Start()
+	}()
+	if err := s.Listen(); err != nil {
+		slog.Error("web server failed", "error", err)
 	}
-	if len(os.Args) > 1 && os.Args[1] == "--configure" {
-		return true
-	}
-	return os.Getenv("API_BASE_URL") == "" || os.Getenv("WORKER_TOKEN") == "" || os.Getenv("WORKER_ID") == ""
-}
-
-func openConfigurator() error {
-	dir := filepath.Dir(os.Args[0])
-	if len(os.Args) > 1 && os.Args[1] == "--configure" {
-		return exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", filepath.Join(dir, "configure.ps1")).Run()
-	}
-	return exec.Command("cmd.exe", "/c", filepath.Join(dir, "configure.cmd")).Run()
 }
