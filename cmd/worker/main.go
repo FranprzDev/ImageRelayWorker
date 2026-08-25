@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -17,21 +16,21 @@ import (
 	"imagerelayworker/internal/config"
 	"imagerelayworker/internal/downloader"
 	"imagerelayworker/internal/platform"
+	"imagerelayworker/internal/web"
 	"imagerelayworker/internal/worker"
 )
 
 func main() {
-	if shouldOpenConfigurator() {
-		if err := openConfigurator(); err != nil {
-			slog.Error("could not open configurator", "error", err)
-			os.Exit(1)
-		}
-		return
-	}
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("invalid configuration", "error", err)
-		os.Exit(1)
+		cfg = config.Config{HealthBindAddress: "127.0.0.1", HealthPort: 8080, PollInterval: 5 * time.Second}
+	}
+	if !platform.IsWindowsService() {
+		go serveWeb(cfg, err == nil)
+	}
+	if err != nil {
+		slog.Error("worker is waiting for configuration", "error", err)
+		select {}
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
 	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, MaxIdleConns: 32, MaxIdleConnsPerHost: 8, IdleConnTimeout: 90 * time.Second, ResponseHeaderTimeout: cfg.DownloadTimeout}
@@ -70,20 +69,13 @@ func parseLevel(value string) slog.Level {
 	}
 }
 
-func shouldOpenConfigurator() bool {
-	if platform.IsWindowsService() {
-		return false
+func serveWeb(cfg config.Config, running bool) {
+	s := &web.Server{Config: cfg, Addr: "127.0.0.1:5173", Running: func() bool { return running }}
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", "http://127.0.0.1:5173").Start()
+	}()
+	if err := s.Listen(); err != nil {
+		slog.Error("web server failed", "error", err)
 	}
-	if len(os.Args) > 1 && os.Args[1] == "--configure" {
-		return true
-	}
-	return os.Getenv("API_BASE_URL") == "" || os.Getenv("WORKER_TOKEN") == "" || os.Getenv("WORKER_ID") == ""
-}
-
-func openConfigurator() error {
-	dir := filepath.Dir(os.Args[0])
-	if len(os.Args) > 1 && os.Args[1] == "--configure" {
-		return exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", filepath.Join(dir, "configure.ps1")).Run()
-	}
-	return exec.Command("cmd.exe", "/c", filepath.Join(dir, "configure.cmd")).Run()
 }

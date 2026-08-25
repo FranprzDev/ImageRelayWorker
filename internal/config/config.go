@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +16,54 @@ type Config struct {
 	MaxConcurrent, MaxImageSizeMB, RetryMaxAttempts, RetryBaseDelayMS         int
 	HealthPort                                                                int
 	AllowHTTP                                                                 bool
+}
+
+func FilePath() string {
+	if p := os.Getenv("WORKER_CONFIG_FILE"); p != "" {
+		return p
+	}
+	d, err := os.UserConfigDir()
+	if err != nil {
+		return "config.json"
+	}
+	return d + string(os.PathSeparator) + "ImageRelayWorker" + string(os.PathSeparator) + "config.json"
+}
+
+func LoadFile() (Config, error) {
+	b, err := os.ReadFile(FilePath())
+	if err != nil {
+		return Config{}, err
+	}
+	var c Config
+	if err := json.Unmarshal(b, &c); err != nil {
+		return c, err
+	}
+	return c, c.Validate()
+}
+
+func (c Config) Validate() error {
+	if c.APIBaseURL == "" || c.WorkerToken == "" || c.WorkerID == "" {
+		return fmt.Errorf("APIBaseURL, WorkerToken and WorkerID are required")
+	}
+	if !strings.HasPrefix(c.APIBaseURL, "https://") && !strings.HasPrefix(c.APIBaseURL, "http://") {
+		return fmt.Errorf("APIBaseURL must use http or https")
+	}
+	return nil
+}
+
+func SaveFile(c Config) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	p := FilePath()
+	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, b, 0600)
 }
 
 func env(k, d string) string {
@@ -31,6 +81,9 @@ func num(k string, d int) (int, error) {
 	return n, nil
 }
 func Load() (Config, error) {
+	if c, err := LoadFile(); err == nil {
+		return c, nil
+	}
 	c := Config{APIBaseURL: strings.TrimRight(os.Getenv("API_BASE_URL"), "/"), WorkerToken: os.Getenv("WORKER_TOKEN"), WorkerID: os.Getenv("WORKER_ID"), UserAgent: env("HTTP_USER_AGENT", "ImageRelayWorker/1.0"), LogLevel: env("LOG_LEVEL", "info"), HealthBindAddress: env("HEALTH_BIND_ADDRESS", "127.0.0.1")}
 	if c.APIBaseURL == "" || c.WorkerToken == "" || c.WorkerID == "" {
 		return c, fmt.Errorf("API_BASE_URL, WORKER_TOKEN and WORKER_ID are required")

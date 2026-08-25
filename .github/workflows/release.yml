@@ -36,7 +36,7 @@ jobs:
         run: |
           $msi = if ($env:GITHUB_REF_TYPE -eq 'tag') { "ImageRelayWorker-$env:GITHUB_REF_NAME.msi" } else { "ImageRelayWorker-pr.msi" }
           "MSI_NAME=$msi" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          wix build installer/ImageRelayWorker.wxs -d WorkerExe=image-relay-worker-windows-amd64.exe -d ConfigureScript=installer/configure.ps1 -o $msi -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext
+          wix build installer/ImageRelayWorker.wxs -d WorkerExe=image-relay-worker-windows-amd64.exe -o $msi -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext
       - name: Validate MSI install and uninstall
         shell: pwsh
         run: |
