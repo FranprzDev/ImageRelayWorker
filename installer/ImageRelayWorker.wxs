@@ -6,7 +6,7 @@
     <Feature Id="MainFeature" Title="ImageRelayWorker" Level="1"><ComponentGroupRef Id="ProductComponents" /></Feature>
     <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" /></StandardDirectory>
     <StandardDirectory Id="DesktopFolder" />
-    <SetProperty Id="WixShellExecTarget" Value="&quot;[INSTALLFOLDER]ImageRelayWorker.exe&quot;" Before="LaunchConfigurator" Sequence="execute" />
+    <SetProperty Id="WixShellExecTarget" Value="http://127.0.0.1:5173" Before="LaunchConfigurator" Sequence="execute" />
     <CustomAction Id="LaunchConfigurator" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixShellExec" Execute="immediate" Return="ignore" />
     <InstallExecuteSequence>
       <Custom Action="LaunchConfigurator" After="InstallFinalize" Condition="NOT Installed AND NOT REMOVE" />
@@ -16,7 +16,7 @@
         <File Id="WorkerExe" Source="$(var.WorkerExe)" KeyPath="yes" />
         <Shortcut Id="DesktopConfiguratorShortcut" Directory="DesktopFolder" Name="ImageRelayWorker" Target="[INSTALLFOLDER]ImageRelayWorker.exe" WorkingDirectory="INSTALLFOLDER" />
         <ServiceInstall Id="WorkerServiceInstall" Name="ImageRelayWorker" DisplayName="ImageRelayWorker" Description="Procesa trabajos de imágenes." Start="auto" Type="ownProcess" ErrorControl="normal" Vital="yes" />
-        <ServiceControl Id="WorkerServiceControl" Name="ImageRelayWorker" Stop="both" Remove="uninstall" Wait="yes" />
+        <ServiceControl Id="WorkerServiceControl" Name="ImageRelayWorker" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
       </Component>
     </ComponentGroup>
   </Package>

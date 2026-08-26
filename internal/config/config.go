@@ -38,7 +38,45 @@ func LoadFile() (Config, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return c, err
 	}
+	c = c.WithDefaults()
 	return c, c.Validate()
+}
+
+func (c Config) WithDefaults() Config {
+	if c.UserAgent == "" {
+		c.UserAgent = "ImageRelayWorker/1.0"
+	}
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
+	}
+	if c.HealthBindAddress == "" {
+		c.HealthBindAddress = "127.0.0.1"
+	}
+	if c.PollInterval == 0 {
+		c.PollInterval = 5 * time.Second
+	}
+	if c.MaxConcurrent == 0 {
+		c.MaxConcurrent = 4
+	}
+	if c.DownloadTimeout == 0 {
+		c.DownloadTimeout = 30 * time.Second
+	}
+	if c.UploadTimeout == 0 {
+		c.UploadTimeout = 60 * time.Second
+	}
+	if c.MaxImageSizeMB == 0 {
+		c.MaxImageSizeMB = 25
+	}
+	if c.RetryMaxAttempts == 0 {
+		c.RetryMaxAttempts = 4
+	}
+	if c.RetryBaseDelayMS == 0 {
+		c.RetryBaseDelayMS = 1000
+	}
+	if c.HealthPort == 0 {
+		c.HealthPort = 8080
+	}
+	return c
 }
 
 func (c Config) Validate() error {
@@ -52,6 +90,7 @@ func (c Config) Validate() error {
 }
 
 func SaveFile(c Config) error {
+	c = c.WithDefaults()
 	if err := c.Validate(); err != nil {
 		return err
 	}
