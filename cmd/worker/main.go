@@ -8,9 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"imagerelayworker/internal/api"
@@ -22,12 +20,17 @@ import (
 )
 
 func main() {
+	if err := platform.RunService(run); err != nil {
+		slog.Error("service failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) {
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = config.Config{HealthBindAddress: "127.0.0.1", HealthPort: 8080, PollInterval: 5 * time.Second}
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	updates := make(chan config.Config, 1)
 	if err == nil {
 		updates <- cfg
@@ -35,19 +38,31 @@ func main() {
 		slog.Error("worker is waiting for configuration", "error", err)
 	}
 	go serveWeb(cfg, err == nil, updates)
-	var cancel context.CancelFunc
+	var lifecycle workerLifecycle
+	defer lifecycle.Stop()
 	for {
 		select {
 		case next := <-updates:
-			if cancel != nil {
-				cancel()
-			}
-			var child context.Context
-			child, cancel = context.WithCancel(ctx)
-			go runWorker(child, next)
+			lifecycle.Restart(ctx, next)
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+type workerLifecycle struct{ cancel context.CancelFunc }
+
+func (l *workerLifecycle) Restart(parent context.Context, cfg config.Config) {
+	l.Stop()
+	child, cancel := context.WithCancel(parent)
+	l.cancel = cancel
+	go runWorker(child, cfg)
+}
+
+func (l *workerLifecycle) Stop() {
+	if l.cancel != nil {
+		l.cancel()
+		l.cancel = nil
 	}
 }
 
