@@ -70,6 +70,10 @@ func (w *Worker) Run(ctx context.Context) error {
 				attempt++
 				if attempt > 1 {
 					w.Stats.Retries.Add(1)
+					status, statusErr := w.API.Status(ctx, job.ID)
+					if statusErr == nil && (status.State == "upload_received" || status.State == "completed") {
+						return nil
+					}
 				}
 				return w.process(ctx, job)
 			}); err != nil {
@@ -115,6 +119,9 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 }
 
 func (w *Worker) process(ctx context.Context, job *model.ImageJob) error {
+	heartbeatCtx, heartbeatCancel := context.WithCancel(ctx)
+	defer heartbeatCancel()
+	go w.heartbeat(heartbeatCtx, job.ID)
 	image, err := w.DL.Get(ctx, job.ImageURL)
 	if err != nil {
 		return err
@@ -131,6 +138,27 @@ func (w *Worker) process(ctx context.Context, job *model.ImageJob) error {
 	}
 	w.Stats.BytesTransferred.Add(digest.bytes)
 	return nil
+}
+
+func (w *Worker) heartbeat(ctx context.Context, jobID string) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	beat := func() {
+		callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := w.API.Heartbeat(callCtx, jobID); err != nil {
+			w.Log.Warn("heartbeat failed", "jobId", jobID, "error", err)
+		}
+		cancel()
+	}
+	beat()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			beat()
+		}
+	}
 }
 
 func short(message string) string {

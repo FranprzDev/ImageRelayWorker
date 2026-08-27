@@ -27,6 +27,34 @@ type Client struct {
 	UploadTimeout            time.Duration
 }
 
+func (c *Client) Heartbeat(ctx context.Context, jobID string) error {
+	resp, err := c.request(ctx, http.MethodPost, "/api/image-jobs/"+jobID+"/heartbeat", nil, "")
+	if err != nil {
+		return retry.RetryableError{Err: err}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return classify(HTTPError{resp.StatusCode, "heartbeat"})
+	}
+	return nil
+}
+
+func (c *Client) Status(ctx context.Context, jobID string) (model.JobStatus, error) {
+	resp, err := c.request(ctx, http.MethodGet, "/api/image-jobs/"+jobID+"/status", nil, "")
+	if err != nil {
+		return model.JobStatus{}, retry.RetryableError{Err: err}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return model.JobStatus{}, classify(HTTPError{resp.StatusCode, "status"})
+	}
+	var status model.JobStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return status, err
+	}
+	return status, nil
+}
+
 func (c *Client) request(ctx context.Context, method, path string, body io.Reader, contentType string) (*http.Response, error) {
 	return c.requestWithHeaders(ctx, method, path, body, contentType, nil)
 }

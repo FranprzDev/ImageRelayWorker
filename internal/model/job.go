@@ -21,3 +21,15 @@ type FailRequest struct {
 	WorkerID string `json:"workerId"`
 	Error    string `json:"error"`
 }
+
+type JobStatus struct {
+	ID     string      `json:"id"`
+	State  string      `json:"state"`
+	Upload *UploadInfo `json:"upload"`
+}
+
+type UploadInfo struct {
+	Bytes       int64  `json:"bytes"`
+	SHA256      string `json:"sha256"`
+	ContentType string `json:"contentType"`
+}
