@@ -28,7 +28,7 @@ type Worker struct {
 	Poll                             time.Duration
 	Concurrency, Attempts, BaseDelay int
 	Log                              *slog.Logger
-	Stats                            Stats
+	Stats                            *Stats
 }
 
 func (w *Worker) Run(ctx context.Context) error {

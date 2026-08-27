@@ -59,7 +59,7 @@ func TestRunClaimsStreamsUploadsAndCompletes(t *testing.T) {
 	dl := &downloader.Downloader{Client: imageClient, Timeout: time.Second, MaxBytes: 100, UserAgent: "test", AllowHTTP: true}
 	client := &api.Client{BaseURL: apiServer.URL, Token: "token", WorkerID: "worker-1", HTTP: apiServer.Client(), UploadTimeout: time.Second}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	w := &Worker{API: client, DL: dl, Poll: time.Millisecond, Concurrency: 1, Attempts: 1, Log: logger}
+	w := &Worker{API: client, DL: dl, Poll: time.Millisecond, Concurrency: 1, Attempts: 1, Log: logger, Stats: &Stats{}}
 	ctx, stop := context.WithCancel(context.Background())
 	cancel = stop
 	if err := w.Run(ctx); err != context.Canceled {

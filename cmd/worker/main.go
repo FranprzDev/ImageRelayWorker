@@ -32,6 +32,19 @@ func run(ctx context.Context) {
 		cfg = config.Config{HealthBindAddress: "127.0.0.1", HealthPort: 8080, PollInterval: 5 * time.Second}
 	}
 	updates := make(chan config.Config, 1)
+	stats := &worker.Stats{}
+	healthCfg := cfg.WithDefaults()
+	healthServer := &http.Server{Addr: fmt.Sprintf("%s:%d", healthCfg.HealthBindAddress, healthCfg.HealthPort), Handler: worker.Health(stats, cfg.WorkerID)}
+	go func() {
+		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("health server failed", "error", err)
+		}
+	}()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = healthServer.Shutdown(shutdownCtx)
+	}()
 	if err == nil {
 		updates <- cfg
 	} else {
@@ -43,7 +56,7 @@ func run(ctx context.Context) {
 	for {
 		select {
 		case next := <-updates:
-			lifecycle.Restart(ctx, next)
+			lifecycle.Restart(ctx, next, stats)
 		case <-ctx.Done():
 			return
 		}
@@ -52,11 +65,11 @@ func run(ctx context.Context) {
 
 type workerLifecycle struct{ cancel context.CancelFunc }
 
-func (l *workerLifecycle) Restart(parent context.Context, cfg config.Config) {
+func (l *workerLifecycle) Restart(parent context.Context, cfg config.Config, stats *worker.Stats) {
 	l.Stop()
 	child, cancel := context.WithCancel(parent)
 	l.cancel = cancel
-	go runWorker(child, cfg)
+	go runWorker(child, cfg, stats)
 }
 
 func (l *workerLifecycle) Stop() {
@@ -66,24 +79,15 @@ func (l *workerLifecycle) Stop() {
 	}
 }
 
-func runWorker(ctx context.Context, cfg config.Config) {
+func runWorker(ctx context.Context, cfg config.Config, stats *worker.Stats) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
 	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, MaxIdleConns: 32, MaxIdleConnsPerHost: 8, IdleConnTimeout: 90 * time.Second, ResponseHeaderTimeout: cfg.DownloadTimeout}
 	httpClient := &http.Client{Transport: transport}
 	client := &api.Client{BaseURL: cfg.APIBaseURL, Token: cfg.WorkerToken, WorkerID: cfg.WorkerID, HTTP: httpClient, UploadTimeout: cfg.UploadTimeout}
 	dl := &downloader.Downloader{Client: httpClient, Timeout: cfg.DownloadTimeout, MaxBytes: int64(cfg.MaxImageSizeMB) * 1024 * 1024, UserAgent: cfg.UserAgent, AllowHTTP: cfg.AllowHTTP}
-	w := &worker.Worker{API: client, DL: dl, Poll: cfg.PollInterval, Concurrency: cfg.MaxConcurrent, Attempts: cfg.RetryMaxAttempts, BaseDelay: cfg.RetryBaseDelayMS, Log: logger}
-	healthServer := &http.Server{Addr: fmt.Sprintf("%s:%d", cfg.HealthBindAddress, cfg.HealthPort), Handler: worker.Health(&w.Stats, cfg.WorkerID)}
-	go func() {
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("health server failed", "error", err)
-		}
-	}()
+	w := &worker.Worker{API: client, DL: dl, Poll: cfg.PollInterval, Concurrency: cfg.MaxConcurrent, Attempts: cfg.RetryMaxAttempts, BaseDelay: cfg.RetryBaseDelayMS, Log: logger, Stats: stats}
 	logger.Info("worker started", "workerId", cfg.WorkerID, "concurrency", cfg.MaxConcurrent)
 	_ = w.Run(ctx)
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	_ = healthServer.Shutdown(shutdownCtx)
 	transport.CloseIdleConnections()
 }
 
